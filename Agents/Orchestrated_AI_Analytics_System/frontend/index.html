@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Analytics System</title>
+
+<!-- Plotly for chart rendering -->
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+<style>
+/* ── Design system ─────────────────────────────────────────────── */
+:root {
+  --bg:        #0d0f14;
+  --surface:   #151820;
+  --border:    #232737;
+  --accent:    #4fffb0;
+  --accent-dim:#1a4d38;
+  --user-bg:   #1c2030;
+  --agent-bg:  #131720;
+  --text:      #dde1ec;
+  --muted:     #5a6080;
+  --danger:    #ff5f6d;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'IBM Plex Sans', sans-serif;
+  --radius:    10px;
+  --gutter:    20px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Layout ────────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-rows: 56px 1fr auto;
+  height: 100vh;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+header .logo {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: .06em;
+  color: var(--accent);
+}
+header .logo span { color: var(--muted); }
+
+#btn-reset {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+#btn-reset:hover { color: var(--danger); border-color: var(--danger); }
+
+#dataset-select {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+#dataset-select:focus { border-color: var(--accent-dim); }
+
+/* ── Chat scroll area ──────────────────────────────────────────── */
+#chat {
+  overflow-y: auto;
+  padding: var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  scroll-behavior: smooth;
+}
+#chat::-webkit-scrollbar { width: 4px; }
+#chat::-webkit-scrollbar-track { background: transparent; }
+#chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Message bubbles ───────────────────────────────────────────── */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: fadeUp .25s ease both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.msg.user .label { color: var(--accent); }
+.msg.agent .label { color: var(--muted); }
+
+.msg .bubble {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+}
+.msg.user .bubble {
+  background: var(--user-bg);
+  border-color: #2a3050;
+  align-self: flex-end;
+  max-width: 80%;
+}
+.msg.agent .bubble {
+  background: var(--agent-bg);
+}
+
+/* ── Progress bar ──────────────────────────────────────────────── */
+.progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 2px;
+}
+.progress-wrap .spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-wrap .progress-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  opacity: .85;
+}
+
+/* ── Answer block ──────────────────────────────────────────────── */
+.answer-block {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ── Chart container ───────────────────────────────────────────── */
+.chart-wrap {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #101318;
+}
+.chart-wrap .chart-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+.chart-wrap .chart-inner {
+  padding: 4px;
+}
+
+/* ── Error ─────────────────────────────────────────────────────── */
+.error-msg {
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 10px 14px;
+  border: 1px solid #3d1a1e;
+  border-radius: var(--radius);
+  background: #1a0d10;
+}
+
+/* ── Empty state ───────────────────────────────────────────────── */
+#empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+}
+#empty .big {
+  font-family: var(--mono);
+  font-size: 28px;
+  color: var(--border);
+  letter-spacing: -.02em;
+}
+#empty p {
+  font-size: 13px;
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.8;
+}
+
+/* ── Input bar ─────────────────────────────────────────────────── */
+#input-bar {
+  padding: 14px var(--gutter);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+#question {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 10px 14px;
+  resize: none;
+  min-height: 42px;
+  max-height: 140px;
+  outline: none;
+  transition: border-color .2s;
+  line-height: 1.5;
+}
+#question:focus { border-color: var(--accent-dim); }
+#question::placeholder { color: var(--muted); }
+
+#btn-send {
+  flex-shrink: 0;
+  width: 42px; height: 42px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity .2s, transform .1s;
+}
+#btn-send:hover { opacity: .85; }
+#btn-send:active { transform: scale(.95); }
+#btn-send:disabled { opacity: .3; cursor: not-allowed; }
+#btn-send svg { fill: #0d0f14; }
+
+/* ── Validator badge ────────────────────────────────────────────── */
+.validator-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-top: 8px;
+  letter-spacing: .06em;
+}
+.validator-badge.PASS       { background:#0d2e1a; color:#4fffb0; border:1px solid #1a4d38; }
+.validator-badge.INCOMPLETE { background:#2e2200; color:#ffc84a; border:1px solid #4d3800; }
+.validator-badge.SUSPICIOUS { background:#2e1800; color:#ff8c42; border:1px solid #4d2c00; }
+.validator-badge.RETRY      { background:#2e0d10; color:#ff5f6d; border:1px solid #4d1a1e; }
+
+/* ── Question type tag ──────────────────────────────────────────── */
+.qtype-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.qtype-tag.analytics { background:#0d2238; color:#4ab4ff; border:1px solid #1a3d5c; }
+.qtype-tag.generic   { background:#1a1a2e; color:#9a8fff; border:1px solid #2e2e5c; }
+
+/* ── Retry indicator ────────────────────────────────────────────── */
+.retry-info {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">Data Analytics</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+     <span id="mode-badge" style="font-family:var(--mono);font-size:10px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:4px;">ready</span>
+     <button id="btn-reset">↺ Reset</button>
+    </div>
+  </header>
+
+  <!-- Chat area -->
+  <div id="chat">
+    <div id="empty">
+      <div class="big">&gt;_</div>
+      <p>Ask analytics questions about the financial dataset,<br/>or ask anything general — the system will route automatically.</p>
+    </div>
+  </div>
+
+  <!-- Input bar -->
+  <div id="input-bar">
+    <textarea id="question" rows="1" placeholder="Ask a data question or a general question…"></textarea>
+    <button id="btn-send" title="Send">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+  </div>
+
+</div>
+
+<script>
+/* ── Config ──────────────────────────────────────────────────── */
+const API = 'http://127.0.0.1:8000';
+
+/* ── DOM refs ────────────────────────────────────────────────── */
+const chat      = document.getElementById('chat');
+const empty     = document.getElementById('empty');
+const textarea  = document.getElementById('question');
+const btnSend   = document.getElementById('btn-send');
+const btnReset  = document.getElementById('btn-reset');
+const modeBadge = document.getElementById('mode-badge');
+
+/* ── State ───────────────────────────────────────────────────── */
+let busy = false;
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
+function hideEmpty()    { if (empty) empty.style.display = 'none'; }
+function autoResize() {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 140) + 'px';
+}
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setBadge(text, color) {
+  modeBadge.textContent = text;
+  modeBadge.style.color = color || 'var(--muted)';
+  modeBadge.style.borderColor = color || 'var(--border)';
+}
+
+/* ── Append a user bubble ────────────────────────────────────── */
+function appendUser(text) {
+  hideEmpty();
+  const msg = document.createElement('div');
+  msg.className = 'msg user';
+  msg.innerHTML = `<div class="label">You</div><div class="bubble">${escHtml(text)}</div>`;
+  chat.appendChild(msg);
+  scrollBottom();
+}
+
+/* ── Append agent bubble with live progress ──────────────────── */
+function appendAgent() {
+  hideEmpty();
+  const msg = document.createElement('div');
+  msg.className = 'msg agent';
+  msg.innerHTML = `<div class="label">Agent</div><div class="bubble" id="agent-live"></div>`;
+  chat.appendChild(msg);
+  scrollBottom();
+  return document.getElementById('agent-live');
+}
+
+function setProgress(bubble, text) {
+  bubble.innerHTML = `
+    <div class="progress-wrap">
+      <div class="spinner"></div>
+      <span class="progress-text">${escHtml(text)}</span>
+    </div>`;
+  scrollBottom();
+}
+
+/* ── Render single Plotly chart ──────────────────────────────── */
+function renderChart(container, figureJson, title) {
+  const chartId = 'chart-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  container.innerHTML = `
+    <div class="chart-wrap">
+      <div class="chart-label">${escHtml(title || 'chart')}</div>
+      <div class="chart-inner">
+        <div id="${chartId}" style="width:100%;height:320px;"></div>
+      </div>
+    </div>`;
+  try {
+    const figData = JSON.parse(figureJson);
+    Plotly.react(chartId, figData.data, {
+      ...figData.layout,
+      paper_bgcolor: 'transparent',
+      plot_bgcolor:  'transparent',
+      font: { color: '#dde1ec', family: 'IBM Plex Sans, sans-serif', size: 12 },
+      margin: { t: 40, b: 50, l: 55, r: 20 },
+    });
+  } catch(e) {
+    document.getElementById(chartId).textContent = 'Chart render error: ' + e.message;
+  }
+}
+
+/* ── Render full result (answer + validator + charts) ────────── */
+function setResult(bubble, payload) {
+  const { final_answer, question_type, validator, retry_count,
+          total_iterations, viz, all_plots } = payload;
+
+  // Question type tag
+  const qtag = question_type
+    ? `<span class="qtype-tag ${question_type}">${question_type}</span>`
+    : '';
+
+  // Answer text
+  let html = `<div class="label" style="margin-bottom:4px;">Answer${qtag}</div>`;
+  html += `<div class="answer-block">${DOMPurify.sanitize(marked.parse(final_answer || ''))}</div>`;
+
+  // Validator badge (analytics only)
+  if (question_type === 'analytics' && validator && validator.verdict) {
+    const v = validator.verdict;
+    html += `<div class="validator-badge ${v}">validator: ${v}</div>`;
+    if (validator.reason) {
+      html += `<div class="retry-info" style="margin-top:4px;font-size:10px;">${escHtml(validator.reason.slice(0, 180))}${validator.reason.length > 180 ? '…' : ''}</div>`;
+    }
+    if (retry_count > 0) {
+      html += `<div class="retry-info">↻ ${retry_count} retry(ies) · ${total_iterations || '?'} iterations</div>`;
+    }
+  }
+
+  bubble.innerHTML = html;
+
+  // Render all charts
+  const plots = all_plots && all_plots.length ? all_plots
+    : (viz && viz.should_visualize && viz.figure_json)
+      ? [{ title: viz.chart_type || 'chart', plotly_json: viz.figure_json }]
+      : [];
+
+  plots.forEach(plot => {
+    if (!plot.plotly_json) return;
+    const wrap = document.createElement('div');
+    bubble.appendChild(wrap);
+    renderChart(wrap, plot.plotly_json, plot.title);
+  });
+
+  bubble.removeAttribute('id');
+
+  // Update mode badge
+  if (question_type === 'generic') {
+    setBadge('web search', '#9a8fff');
+  } else {
+    const v = validator && validator.verdict || '';
+    const color = v === 'PASS' ? '#4fffb0' : v === 'SUSPICIOUS' ? '#ff8c42' : 'var(--muted)';
+    setBadge(v ? `validator: ${v}` : 'analytics', color);
+  }
+
+  scrollBottom();
+}
+
+function setError(bubble, msg) {
+  bubble.innerHTML = `<div class="error-msg">⚠ ${escHtml(msg)}</div>`;
+  bubble.removeAttribute('id');
+  setBadge('error', 'var(--danger)');
+  scrollBottom();
+}
+
+/* ── Send question ───────────────────────────────────────────── */
+async function send() {
+  const question = textarea.value.trim();
+  if (!question || busy) return;
+
+  busy = true;
+  btnSend.disabled = true;
+  textarea.value = '';
+  autoResize();
+  setBadge('thinking…', 'var(--accent)');
+
+  appendUser(question);
+  const agentBubble = appendAgent();
+  setProgress(agentBubble, 'Connecting…');
+
+  try {
+    const resp = await fetch(`${API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      setError(agentBubble, `HTTP ${resp.status}: ${err}`);
+      return;
+    }
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop();
+
+      for (const frame of frames) {
+        if (!frame.trim()) continue;
+        let eventType = 'message';
+        const dataLines = [];
+        for (const line of frame.split('\n')) {
+          if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+        }
+        const data = dataLines.join('\n');
+
+        if (eventType === 'progress') {
+          setProgress(agentBubble, data);
+        } else if (eventType === 'result') {
+          setResult(agentBubble, JSON.parse(data));
+        } else if (eventType === 'error') {
+          setError(agentBubble, data);
+        }
+      }
+    }
+  } catch(err) {
+    setError(agentBubble, err.message);
+  } finally {
+    busy = false;
+    btnSend.disabled = false;
+    textarea.focus();
+  }
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+async function resetSession() {
+  if (busy) return;
+  try { await fetch(`${API}/reset`, { method: 'POST' }); } catch(_) {}
+  chat.innerHTML = '';
+  chat.appendChild(empty);
+  empty.style.display = '';
+  setBadge('ready', '');
+}
+
+/* ── Events ──────────────────────────────────────────────────── */
+btnSend.addEventListener('click', send);
+textarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+textarea.addEventListener('input', autoResize);
+btnReset.addEventListener('click', () => {
+  if (confirm('Clear conversation and start over?')) resetSession();
+});
+
+</script>
+</body>
+</html>
